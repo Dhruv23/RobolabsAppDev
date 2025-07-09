@@ -10,7 +10,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-// Item class
 class InventoryItem {
   String name;
   int quantity;
@@ -27,7 +26,6 @@ class InventoryItem {
   }
 }
 
-// Root widget
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -38,10 +36,10 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFB2232A), // Robolabs Red
+          seedColor: const Color(0xFFB2232A),
           brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFF1C1C1C), // Dark background
+        scaffoldBackgroundColor: const Color(0xFF1C1C1C),
         textTheme: GoogleFonts.montserratTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
@@ -59,7 +57,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Home Page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -69,6 +66,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int? _hoveredIndex;
+  String? _selectedLocation;
+  final List<String> _locations = ['All', 'Fremont', 'Dublin', 'San Jose'];
 
   Future<void> addItemToFirebase(InventoryItem item) async {
     await FirebaseFirestore.instance.collection('inventory').add({
@@ -114,99 +113,135 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: DropdownButton<String>(
+              value: _selectedLocation ?? 'All',
+              onChanged: (value) {
+                setState(() {
+                  _selectedLocation = value == 'All' ? null : value;
+                });
+              },
+              items: _locations.map((loc) {
+                return DropdownMenuItem<String>(value: loc, child: Text(loc));
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('inventory')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('inventory')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+                final docs = snapshot.data!.docs;
+                final filteredDocs = _selectedLocation == null
+                    ? docs
+                    : docs
+                          .where(
+                            (doc) =>
+                                (doc.data()
+                                    as Map<String, dynamic>)['location'] ==
+                                _selectedLocation,
+                          )
+                          .toList();
 
-          final docs = snapshot.data!.docs;
+                if (filteredDocs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No items in this location',
+                      style: TextStyle(fontSize: 20),
+                    ),
+                  );
+                }
 
-          if (docs.isEmpty) {
-            return const Center(
-              child: Text('Inventory is empty', style: TextStyle(fontSize: 20)),
-            );
-          }
+                return ListView.builder(
+                  itemCount: filteredDocs.length,
+                  itemBuilder: (context, index) {
+                    final doc = filteredDocs[index];
+                    final item = InventoryItem.fromMap(
+                      doc.data() as Map<String, dynamic>,
+                    );
 
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final item = InventoryItem.fromMap(
-                doc.data() as Map<String, dynamic>,
-              );
-
-              return MouseRegion(
-                onEnter: (_) => setState(() => _hoveredIndex = index),
-                onExit: (_) => setState(() => _hoveredIndex = null),
-                child: ListTile(
-                  leading: const Icon(Icons.inventory),
-                  title: Text(item.name),
-                  subtitle: Text(
-                    'Qty: ${item.quantity} | Location: ${item.location}',
-                  ),
-                  trailing: _hoveredIndex == index
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 20),
-                              onPressed: () async {
-                                final edited = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AddItemPage(item: item),
-                                  ),
-                                );
-
-                                if (edited != null && edited is InventoryItem) {
-                                  await editItem(doc.id, edited);
-                                }
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 20),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('Delete item?'),
-                                    content: Text(
-                                      'Are you sure you want to delete "${item.name}"?',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () async {
-                                          Navigator.pop(context);
-                                          await deleteItem(doc.id);
-                                        },
-                                        child: const Text(
-                                          'Delete',
-                                          style: TextStyle(color: Colors.red),
+                    return MouseRegion(
+                      onEnter: (_) => setState(() => _hoveredIndex = index),
+                      onExit: (_) => setState(() => _hoveredIndex = null),
+                      child: ListTile(
+                        leading: const Icon(Icons.inventory),
+                        title: Text(item.name),
+                        subtitle: Text(
+                          'Qty: ${item.quantity} | Location: ${item.location}',
+                        ),
+                        trailing: _hoveredIndex == index
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    onPressed: () async {
+                                      final edited = await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              AddItemPage(item: item),
                                         ),
-                                      ),
-                                    ],
+                                      );
+                                      if (edited != null &&
+                                          edited is InventoryItem) {
+                                        await editItem(doc.id, edited);
+                                      }
+                                    },
                                   ),
-                                );
-                              },
-                            ),
-                          ],
-                        )
-                      : null,
-                ),
-              );
-            },
-          );
-        },
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, size: 20),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text('Delete item?'),
+                                          content: Text(
+                                            'Are you sure you want to delete "${item.name}"?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () async {
+                                                Navigator.pop(context);
+                                                await deleteItem(doc.id);
+                                              },
+                                              child: const Text(
+                                                'Delete',
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -214,7 +249,6 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(builder: (_) => const AddItemPage()),
           );
-
           if (newItem != null && newItem is InventoryItem) {
             await addItemToFirebase(newItem);
           }
@@ -225,8 +259,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-// Screen to add a new item **WEEK 2**
 
 class AddItemPage extends StatefulWidget {
   final InventoryItem? item;
@@ -263,7 +295,6 @@ class _AddItemPageState extends State<AddItemPage> {
     final name = nameController.text.trim();
     final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
     final location = locationController.text.trim();
-
     if (name.isNotEmpty && location.isNotEmpty && quantity > 0) {
       Navigator.pop(context, InventoryItem(name, quantity, location));
     }
@@ -275,10 +306,7 @@ class _AddItemPageState extends State<AddItemPage> {
       appBar: AppBar(
         title: Row(
           children: [
-            Image.asset(
-              'assets/robolabs_logo.png',
-              height: 30, // adjust as needed
-            ),
+            Image.asset('assets/robolabs_logo.png', height: 30),
             const SizedBox(width: 8),
             Text(widget.item != null ? 'Edit Item' : 'Add Item'),
           ],
@@ -288,7 +316,6 @@ class _AddItemPageState extends State<AddItemPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Form Fields
             TextField(
               controller: nameController,
               decoration: const InputDecoration(labelText: 'Item Name'),
@@ -303,7 +330,6 @@ class _AddItemPageState extends State<AddItemPage> {
               decoration: const InputDecoration(labelText: 'Location'),
             ),
             const SizedBox(height: 20),
-
             ElevatedButton(
               onPressed: saveItem,
               child: Text(widget.item != null ? 'Update' : 'Save'),
