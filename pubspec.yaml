@@ -1,5 +1,6 @@
 name: inventory_mobile
 description: "A new Flutter project."
+homepage: https://dhruv23.github.io/RobolabsAppDev/
 
 publish_to: 'none'
 version: 1.0.0+1
